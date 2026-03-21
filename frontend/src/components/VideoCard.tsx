@@ -6,18 +6,20 @@ import {
   Dimensions,
   TouchableOpacity,
   Image,
-  Linking,
   Platform,
 } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import { Post, INTENTS } from '../types';
+import { Post, INTENTS, RECOMMENDATION_REASONS } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useFeedStore } from '../store/feedStore';
 import { useRouter } from 'expo-router';
+import TipModal from './TipModal';
+import ProductModal from './ProductModal';
+import WhySeeing from './WhySeeing';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const VIDEO_HEIGHT = SCREEN_HEIGHT - 150;
+const VIDEO_HEIGHT = SCREEN_HEIGHT - 60;
 
 interface VideoCardProps {
   post: Post;
@@ -26,13 +28,17 @@ interface VideoCardProps {
 
 export default function VideoCard({ post, isActive }: VideoCardProps) {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const { likePost, unlikePost, followUser, unfollowUser } = useFeedStore();
   const videoRef = useRef<Video>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showProducts, setShowProducts] = useState(false);
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [showWhySeeing, setShowWhySeeing] = useState(false);
 
   const intent = INTENTS.find(i => i.id === post.intent_tag);
+  const recommendationReason = post.recommendation_reason || 
+    RECOMMENDATION_REASONS[Math.floor(Math.random() * RECOMMENDATION_REASONS.length)].replace('{intent}', intent?.label || 'content');
 
   useEffect(() => {
     if (isActive && post.media_type === 'video') {
@@ -83,8 +89,13 @@ export default function VideoCard({ post, isActive }: VideoCardProps) {
     router.push(`/user/${post.user_id}`);
   };
 
-  const handleProductLink = (url: string) => {
-    Linking.openURL(url);
+  const handleTip = () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    if (post.user_id === user?.user_id) return;
+    setShowTipModal(true);
   };
 
   const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
@@ -126,11 +137,15 @@ export default function VideoCard({ post, isActive }: VideoCardProps) {
         )}
       </TouchableOpacity>
 
-      {/* Intent Tag */}
-      <View style={[styles.intentTag, { backgroundColor: intent?.color || '#666' }]}>
+      {/* Intent Tag - Clickable for "Why seeing this" */}
+      <TouchableOpacity 
+        style={[styles.intentTag, { backgroundColor: intent?.color || '#666' }]}
+        onPress={() => setShowWhySeeing(true)}
+      >
         <Ionicons name={intent?.icon as any || 'help'} size={14} color="#fff" />
         <Text style={styles.intentText}>{intent?.label || post.intent_tag}</Text>
-      </View>
+        <Ionicons name="information-circle-outline" size={14} color="rgba(255,255,255,0.7)" />
+      </TouchableOpacity>
 
       {/* Right Actions */}
       <View style={styles.actions}>
@@ -143,7 +158,7 @@ export default function VideoCard({ post, isActive }: VideoCardProps) {
               <Ionicons name="person" size={20} color="#fff" />
             </View>
           )}
-          {!post.is_following && isAuthenticated && (
+          {!post.is_following && isAuthenticated && post.user_id !== user?.user_id && (
             <TouchableOpacity style={styles.followBadge} onPress={handleFollow}>
               <Ionicons name="add" size={12} color="#fff" />
             </TouchableOpacity>
@@ -162,15 +177,23 @@ export default function VideoCard({ post, isActive }: VideoCardProps) {
 
         {/* Comment */}
         <TouchableOpacity style={styles.actionButton} onPress={handleComment}>
-          <Ionicons name="chatbubble-outline" size={30} color="#fff" />
+          <Ionicons name="chatbubble-ellipses-outline" size={30} color="#fff" />
           <Text style={styles.actionText}>{post.comments_count}</Text>
         </TouchableOpacity>
+
+        {/* Tip */}
+        {post.user_id !== user?.user_id && (
+          <TouchableOpacity style={styles.actionButton} onPress={handleTip}>
+            <Ionicons name="gift-outline" size={30} color="#D4AF37" />
+            <Text style={[styles.actionText, { color: '#D4AF37' }]}>Tip</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Products */}
         {post.product_links && post.product_links.length > 0 && (
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => setShowProducts(!showProducts)}
+            onPress={() => setShowProductModal(true)}
           >
             <Ionicons name="bag-outline" size={30} color="#fff" />
             <Text style={styles.actionText}>{post.product_links.length}</Text>
@@ -179,7 +202,8 @@ export default function VideoCard({ post, isActive }: VideoCardProps) {
 
         {/* Share */}
         <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="share-outline" size={30} color="#fff" />
+          <Ionicons name="arrow-redo-outline" size={28} color="#fff" />
+          <Text style={styles.actionText}>Share</Text>
         </TouchableOpacity>
       </View>
 
@@ -189,30 +213,53 @@ export default function VideoCard({ post, isActive }: VideoCardProps) {
           <Text style={styles.username}>@{post.user?.username || post.user?.name || 'user'}</Text>
         </TouchableOpacity>
         {post.caption && <Text style={styles.caption} numberOfLines={2}>{post.caption}</Text>}
+        
+        {/* Product tag preview */}
+        {post.product_links && post.product_links.length > 0 && (
+          <TouchableOpacity 
+            style={styles.productPreview}
+            onPress={() => setShowProductModal(true)}
+          >
+            <Ionicons name="bag" size={14} color="#D4AF37" />
+            <Text style={styles.productPreviewText}>
+              {post.product_links.length} product{post.product_links.length > 1 ? 's' : ''} tagged
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Products Panel */}
-      {showProducts && post.product_links && post.product_links.length > 0 && (
-        <View style={styles.productsPanel}>
-          <Text style={styles.productsPanelTitle}>Products in this video</Text>
-          {post.product_links.map((product, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.productItem}
-              onPress={() => handleProductLink(product.url)}
-            >
-              <View style={styles.productIcon}>
-                <Ionicons name="bag" size={20} color="#D4AF37" />
-              </View>
-              <View style={styles.productInfo}>
-                <Text style={styles.productName}>{product.name}</Text>
-                <Text style={styles.productPlatform}>{product.platform}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#888" />
-            </TouchableOpacity>
-          ))}
-        </View>
+      {/* Tip Modal */}
+      {post.user && (
+        <TipModal
+          visible={showTipModal}
+          onClose={() => setShowTipModal(false)}
+          creator={{
+            user_id: post.user_id,
+            name: post.user.name,
+            picture: post.user.picture,
+          }}
+        />
       )}
+
+      {/* Product Modal */}
+      <ProductModal
+        visible={showProductModal}
+        onClose={() => setShowProductModal(false)}
+        products={post.product_links}
+      />
+
+      {/* Why Seeing Modal */}
+      <WhySeeing
+        visible={showWhySeeing}
+        onClose={() => setShowWhySeeing(false)}
+        reason={recommendationReason}
+        intentTag={post.intent_tag}
+        engagement={{
+          watchTime: Math.floor(Math.random() * 30) + 10,
+          completionRate: Math.floor(Math.random() * 40) + 60,
+          likes: post.likes_count,
+        }}
+      />
     </View>
   );
 }
@@ -239,7 +286,7 @@ const styles = StyleSheet.create({
   },
   intentTag: {
     position: 'absolute',
-    top: 50,
+    top: 60,
     left: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -256,9 +303,9 @@ const styles = StyleSheet.create({
   actions: {
     position: 'absolute',
     right: 12,
-    bottom: 100,
+    bottom: 120,
     alignItems: 'center',
-    gap: 20,
+    gap: 18,
   },
   avatarContainer: {
     marginBottom: 10,
@@ -312,50 +359,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  productsPanel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.95)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: VIDEO_HEIGHT * 0.4,
-  },
-  productsPanelTitle: {
-    color: '#D4AF37',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  productItem: {
+  productPreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+    marginTop: 10,
+    alignSelf: 'flex-start',
   },
-  productIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#1a1a2e',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productName: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  productPlatform: {
-    color: '#888',
+  productPreviewText: {
+    color: '#D4AF37',
     fontSize: 12,
-    marginTop: 2,
+    fontWeight: '600',
   },
 });

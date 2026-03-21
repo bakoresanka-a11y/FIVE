@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
 import base64
+import stripe
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -20,6 +21,9 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'five_app')]
+
+# Stripe configuration (test mode)
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY', 'sk_test_placeholder')
 
 # Create the main app
 app = FastAPI(title="Five - Watch. Learn. Earn.")
@@ -73,6 +77,8 @@ class PostCreate(BaseModel):
     caption: Optional[str] = None
     intent_tag: str  # "learn", "earn", "relax", "explore", "shop"
     product_links: Optional[List[Dict[str, str]]] = None  # [{"name": "Product", "url": "...", "platform": "amazon"}]
+    space_id: Optional[str] = None  # Optional space to post in
+    products: Optional[List[str]] = None  # Product IDs tagged in this post
 
 class Post(BaseModel):
     post_id: str
@@ -120,6 +126,55 @@ class CommentResponse(BaseModel):
     content: str
     created_at: datetime
     user: Optional[Dict[str, Any]] = None
+
+# ============== NEW MODELS FOR SPACES, TIPS, PRODUCTS ==============
+
+class SpaceCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    cover_image: Optional[str] = None  # base64
+    tags: Optional[List[str]] = None
+
+class Space(BaseModel):
+    space_id: str
+    name: str
+    description: Optional[str] = None
+    cover_image: Optional[str] = None
+    tags: Optional[List[str]] = None
+    members_count: int = 0
+    posts_count: int = 0
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class ProductCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float
+    currency: str = "USD"
+    image: Optional[str] = None  # base64
+    external_url: Optional[str] = None
+    platform: Optional[str] = None  # amazon, shopify, aliexpress, internal
+
+class Product(BaseModel):
+    product_id: str
+    creator_id: str
+    name: str
+    description: Optional[str] = None
+    price: float
+    currency: str = "USD"
+    image: Optional[str] = None
+    external_url: Optional[str] = None
+    platform: Optional[str] = None
+    sales_count: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class TipCreate(BaseModel):
+    amount: float  # in dollars
+    message: Optional[str] = None
+
+class PurchaseCreate(BaseModel):
+    product_id: str
+    quantity: int = 1
 
 # ============== AUTH HELPERS ==============
 
@@ -831,6 +886,295 @@ async def root():
 @api_router.get("/health")
 async def health():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+# ============== SPACES ROUTES ==============
+
+@api_router.post("/spaces")
+async def create_space(space_data: SpaceCreate, user: User = Depends(require_auth)):
+    """Create a new space"""
+    space_id = f"space_{uuid.uuid4().hex[:12]}"
+    
+    space = {
+        "space_id": space_id,
+        "name": space_data.name,
+        "description": space_data.description,
+        "cover_image": space_data.cover_image,
+        "tags": space_data.tags or [],
+        "members_count": 1,
+        "posts_count": 0,
+        "created_by": user.user_id,
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.spaces.insert_one(space)
+    
+    # Auto-join creator
+    await db.space_members.insert_one({
+        "space_id": space_id,
+        "user_id": user.user_id,
+        "role": "admin",
+        "joined_at": datetime.now(timezone.utc)
+    })
+    
+    return {**{k: v for k, v in space.items() if k != "_id"}, "created_at": space["created_at"].isoformat()}
+
+@api_router.get("/spaces")
+async def get_spaces(skip: int = 0, limit: int = 20):
+    """Get all spaces"""
+    spaces = await db.spaces.find({}, {"_id": 0}).sort("members_count", -1).skip(skip).limit(limit).to_list(limit)
+    return spaces
+
+@api_router.get("/spaces/{space_id}")
+async def get_space(space_id: str, request: Request):
+    """Get a single space"""
+    space = await db.spaces.find_one({"space_id": space_id}, {"_id": 0})
+    if not space:
+        raise HTTPException(status_code=404, detail="Space not found")
+    
+    current_user = await get_current_user(request)
+    is_member = False
+    if current_user:
+        membership = await db.space_members.find_one({
+            "space_id": space_id,
+            "user_id": current_user.user_id
+        })
+        is_member = membership is not None
+    
+    return {**space, "is_member": is_member}
+
+@api_router.post("/spaces/{space_id}/join")
+async def join_space(space_id: str, user: User = Depends(require_auth)):
+    """Join a space"""
+    space = await db.spaces.find_one({"space_id": space_id})
+    if not space:
+        raise HTTPException(status_code=404, detail="Space not found")
+    
+    existing = await db.space_members.find_one({
+        "space_id": space_id,
+        "user_id": user.user_id
+    })
+    if existing:
+        return {"message": "Already a member"}
+    
+    await db.space_members.insert_one({
+        "space_id": space_id,
+        "user_id": user.user_id,
+        "role": "member",
+        "joined_at": datetime.now(timezone.utc)
+    })
+    
+    await db.spaces.update_one(
+        {"space_id": space_id},
+        {"$inc": {"members_count": 1}}
+    )
+    
+    return {"message": "Joined space"}
+
+@api_router.delete("/spaces/{space_id}/leave")
+async def leave_space(space_id: str, user: User = Depends(require_auth)):
+    """Leave a space"""
+    result = await db.space_members.delete_one({
+        "space_id": space_id,
+        "user_id": user.user_id
+    })
+    
+    if result.deleted_count > 0:
+        await db.spaces.update_one(
+            {"space_id": space_id},
+            {"$inc": {"members_count": -1}}
+        )
+    
+    return {"message": "Left space"}
+
+@api_router.get("/spaces/{space_id}/posts")
+async def get_space_posts(space_id: str, skip: int = 0, limit: int = 20):
+    """Get posts in a space"""
+    posts = await db.posts.find(
+        {"space_id": space_id},
+        {"_id": 0}
+    ).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return posts
+
+# ============== PRODUCTS ROUTES ==============
+
+@api_router.post("/products")
+async def create_product(product_data: ProductCreate, user: User = Depends(require_auth)):
+    """Create a product for sale"""
+    product_id = f"prod_{uuid.uuid4().hex[:12]}"
+    
+    product = {
+        "product_id": product_id,
+        "creator_id": user.user_id,
+        "name": product_data.name,
+        "description": product_data.description,
+        "price": product_data.price,
+        "currency": product_data.currency,
+        "image": product_data.image,
+        "external_url": product_data.external_url,
+        "platform": product_data.platform or "internal",
+        "sales_count": 0,
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.products.insert_one(product)
+    
+    return {**{k: v for k, v in product.items() if k != "_id"}, "created_at": product["created_at"].isoformat()}
+
+@api_router.get("/products")
+async def get_products(creator_id: Optional[str] = None, skip: int = 0, limit: int = 20):
+    """Get products"""
+    query = {}
+    if creator_id:
+        query["creator_id"] = creator_id
+    
+    products = await db.products.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return products
+
+@api_router.get("/products/{product_id}")
+async def get_product(product_id: str):
+    """Get a single product"""
+    product = await db.products.find_one({"product_id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Get creator info
+    creator = await db.users.find_one({"user_id": product["creator_id"]}, {"_id": 0})
+    
+    return {
+        **product,
+        "creator": {
+            "user_id": creator["user_id"] if creator else None,
+            "name": creator["name"] if creator else "Unknown",
+            "picture": creator.get("picture") if creator else None
+        } if creator else None
+    }
+
+# ============== TIPS & PAYMENTS ROUTES ==============
+
+@api_router.post("/users/{user_id}/tip")
+async def send_tip(user_id: str, tip_data: TipCreate, user: User = Depends(require_auth)):
+    """Send a tip to a creator (Stripe integration placeholder)"""
+    if user_id == user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot tip yourself")
+    
+    recipient = await db.users.find_one({"user_id": user_id})
+    if not recipient:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if tip_data.amount < 1:
+        raise HTTPException(status_code=400, detail="Minimum tip is $1")
+    
+    tip_id = f"tip_{uuid.uuid4().hex[:12]}"
+    
+    # Record the tip
+    tip = {
+        "tip_id": tip_id,
+        "from_user_id": user.user_id,
+        "to_user_id": user_id,
+        "amount": tip_data.amount,
+        "currency": "USD",
+        "message": tip_data.message,
+        "status": "completed",  # In production, this would be "pending" until Stripe confirms
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.tips.insert_one(tip)
+    
+    # Update creator earnings
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$inc": {"total_earnings": tip_data.amount}}
+    )
+    
+    return {
+        "tip_id": tip_id,
+        "amount": tip_data.amount,
+        "message": "Tip sent successfully! (Test mode - no actual charge)",
+        "status": "completed"
+    }
+
+@api_router.post("/products/{product_id}/purchase")
+async def purchase_product(product_id: str, purchase_data: PurchaseCreate, user: User = Depends(require_auth)):
+    """Purchase a product (Stripe integration placeholder)"""
+    product = await db.products.find_one({"product_id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    total = product["price"] * purchase_data.quantity
+    order_id = f"order_{uuid.uuid4().hex[:12]}"
+    
+    # Record the order
+    order = {
+        "order_id": order_id,
+        "product_id": product_id,
+        "buyer_id": user.user_id,
+        "seller_id": product["creator_id"],
+        "quantity": purchase_data.quantity,
+        "total": total,
+        "currency": product["currency"],
+        "status": "completed",  # In production, this would be "pending"
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.orders.insert_one(order)
+    
+    # Update product sales count
+    await db.products.update_one(
+        {"product_id": product_id},
+        {"$inc": {"sales_count": purchase_data.quantity}}
+    )
+    
+    # Update creator earnings (90% goes to creator, 10% platform fee)
+    creator_earning = total * 0.9
+    await db.users.update_one(
+        {"user_id": product["creator_id"]},
+        {"$inc": {"total_earnings": creator_earning}}
+    )
+    
+    return {
+        "order_id": order_id,
+        "total": total,
+        "message": "Purchase successful! (Test mode - no actual charge)",
+        "status": "completed"
+    }
+
+@api_router.get("/users/{user_id}/earnings")
+async def get_earnings(user_id: str, user: User = Depends(require_auth)):
+    """Get creator earnings"""
+    if user_id != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get total tips received
+    tips_cursor = db.tips.find({"to_user_id": user_id, "status": "completed"})
+    tips = await tips_cursor.to_list(1000)
+    total_tips = sum(t.get("amount", 0) for t in tips)
+    
+    # Get total product sales
+    orders_cursor = db.orders.find({"seller_id": user_id, "status": "completed"})
+    orders = await orders_cursor.to_list(1000)
+    total_sales = sum(o.get("total", 0) * 0.9 for o in orders)  # 90% after platform fee
+    
+    return {
+        "total_earnings": total_tips + total_sales,
+        "tips_earned": total_tips,
+        "sales_earned": total_sales,
+        "tips_count": len(tips),
+        "orders_count": len(orders)
+    }
+
+# ============== USER SPACES ==============
+
+@api_router.get("/users/{user_id}/spaces")
+async def get_user_spaces(user_id: str, skip: int = 0, limit: int = 20):
+    """Get spaces a user is a member of"""
+    memberships = await db.space_members.find(
+        {"user_id": user_id},
+        {"_id": 0}
+    ).skip(skip).limit(limit).to_list(limit)
+    
+    spaces = []
+    for membership in memberships:
+        space = await db.spaces.find_one({"space_id": membership["space_id"]}, {"_id": 0})
+        if space:
+            spaces.append(space)
+    
+    return spaces
 
 # Include the router in the main app
 app.include_router(api_router)

@@ -16,23 +16,43 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFeedStore } from '../../src/store/feedStore';
 import { useAuthStore } from '../../src/store/authStore';
 import VideoCard from '../../src/components/VideoCard';
+import SmartPrompt from '../../src/components/SmartPrompt';
 import { Post, IntentTag } from '../../src/types';
+import { useRouter } from 'expo-router';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const VIDEO_HEIGHT = SCREEN_HEIGHT - 60;
+const PROMPT_INTERVAL = 12; // Show prompt every 12 videos
 
 type FeedTab = 'following' | 'foryou';
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { posts, isLoading, currentIntent, setCurrentIntent, fetchPosts, hasMore } = useFeedStore();
   const { isAuthenticated } = useAuthStore();
   const [activeIndex, setActiveIndex] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<FeedTab>('foryou');
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [promptType, setPromptType] = useState<'continue' | 'intent'>('continue');
+  const [videosWatched, setVideosWatched] = useState(0);
 
   useEffect(() => {
     fetchPosts(true);
   }, []);
+
+  // Track videos watched and show prompts
+  useEffect(() => {
+    if (activeIndex > 0 && activeIndex !== videosWatched) {
+      setVideosWatched(activeIndex);
+      
+      // Show prompt every PROMPT_INTERVAL videos
+      if (activeIndex > 0 && activeIndex % PROMPT_INTERVAL === 0) {
+        setPromptType(Math.random() > 0.5 ? 'continue' : 'intent');
+        setShowPrompt(true);
+      }
+    }
+  }, [activeIndex]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -67,6 +87,17 @@ export default function HomeScreen() {
 
   const keyExtractor = useCallback((item: Post) => item.post_id, []);
 
+  const handlePromptContinue = () => {
+    setShowPrompt(false);
+  };
+
+  const handlePromptSwitchIntent = (intent: IntentTag | 'all') => {
+    setShowPrompt(false);
+    if (intent !== currentIntent) {
+      setCurrentIntent(intent);
+    }
+  };
+
   const ListEmptyComponent = () => (
     <View style={styles.emptyContainer}>
       <Image
@@ -90,7 +121,6 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <TouchableOpacity style={styles.liveButton}>
             <Ionicons name="radio" size={20} color="#fff" />
-            <Text style={styles.liveText}>LIVE</Text>
           </TouchableOpacity>
           
           <View style={styles.tabsContainer}>
@@ -115,7 +145,10 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
           
-          <TouchableOpacity style={styles.searchButton}>
+          <TouchableOpacity 
+            style={styles.searchButton}
+            onPress={() => router.push('/(tabs)/discover')}
+          >
             <Ionicons name="search" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -164,6 +197,16 @@ export default function HomeScreen() {
       ) : (
         <ListEmptyComponent />
       )}
+
+      {/* Smart Prompt */}
+      <SmartPrompt
+        visible={showPrompt}
+        type={promptType}
+        currentIntent={currentIntent}
+        onContinue={handlePromptContinue}
+        onSwitchIntent={handlePromptSwitchIntent}
+        onClose={() => setShowPrompt(false)}
+      />
     </View>
   );
 }
@@ -188,14 +231,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   liveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  liveText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
+    width: 40,
+    alignItems: 'flex-start',
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -222,7 +259,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   searchButton: {
-    padding: 4,
+    width: 40,
+    alignItems: 'flex-end',
   },
   loadingContainer: {
     flex: 1,
