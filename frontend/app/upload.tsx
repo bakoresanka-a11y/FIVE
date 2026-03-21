@@ -11,6 +11,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,8 @@ import { useAuthStore } from '../src/store/authStore';
 import { useFeedStore } from '../src/store/feedStore';
 import { api } from '../src/utils/api';
 import { INTENTS, IntentTag } from '../src/types';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function UploadScreen() {
   const router = useRouter();
@@ -43,7 +46,7 @@ export default function UploadScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['images', 'videos'],
       allowsEditing: true,
       quality: 0.8,
       base64: true,
@@ -129,6 +132,7 @@ export default function UploadScreen() {
   };
 
   const platforms = ['amazon', 'aliexpress', 'shopify', 'taobao', 'ebay', 'other'];
+  const selectedIntent = INTENTS.find(i => i.id === intentTag);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -155,33 +159,33 @@ export default function UploadScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Media Preview */}
-          <View style={styles.mediaSection}>
-            {media ? (
-              <View style={styles.previewContainer}>
-                <Image source={{ uri: media.uri }} style={styles.preview} />
-                <TouchableOpacity style={styles.removeMedia} onPress={() => setMedia(null)}>
-                  <Ionicons name="close-circle" size={32} color="#FF4458" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.mediaButtons}>
-                <TouchableOpacity style={styles.mediaButton} onPress={pickMedia}>
-                  <Ionicons name="images" size={40} color="#D4AF37" />
-                  <Text style={styles.mediaButtonText}>Gallery</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
-                  <Ionicons name="camera" size={40} color="#D4AF37" />
-                  <Text style={styles.mediaButtonText}>Camera</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+        <View style={styles.mainContent}>
+          {/* Left side - Media and Caption */}
+          <ScrollView style={styles.leftSection} showsVerticalScrollIndicator={false}>
+            {/* Media Preview */}
+            <View style={styles.mediaSection}>
+              {media ? (
+                <View style={styles.previewContainer}>
+                  <Image source={{ uri: media.uri }} style={styles.preview} />
+                  <TouchableOpacity style={styles.removeMedia} onPress={() => setMedia(null)}>
+                    <Ionicons name="close-circle" size={32} color="#FF4458" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.mediaButtons}>
+                  <TouchableOpacity style={styles.mediaButton} onPress={pickMedia}>
+                    <Ionicons name="images" size={36} color="#D4AF37" />
+                    <Text style={styles.mediaButtonText}>Gallery</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
+                    <Ionicons name="camera" size={36} color="#D4AF37" />
+                    <Text style={styles.mediaButtonText}>Camera</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
 
-          {/* Caption */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Caption</Text>
+            {/* Caption */}
             <TextInput
               style={styles.captionInput}
               placeholder="Write a caption..."
@@ -191,109 +195,111 @@ export default function UploadScreen() {
               multiline
               maxLength={500}
             />
-          </View>
 
-          {/* Intent Tag */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Content Type</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.intentTags}>
-                {INTENTS.map((intent) => (
-                  <TouchableOpacity
-                    key={intent.id}
-                    style={[
-                      styles.intentChip,
-                      intentTag === intent.id && { backgroundColor: intent.color },
-                    ]}
-                    onPress={() => setIntentTag(intent.id)}
-                  >
-                    <Ionicons
-                      name={intent.icon as any}
-                      size={18}
-                      color={intentTag === intent.id ? '#fff' : intent.color}
-                    />
-                    <Text
-                      style={[
-                        styles.intentChipText,
-                        intentTag === intent.id && styles.intentChipTextActive,
-                      ]}
-                    >
-                      {intent.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+            {/* Product Links */}
+            <View style={styles.productsSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionLabel}>Product Links</Text>
+                <TouchableOpacity onPress={() => setShowProductForm(!showProductForm)}>
+                  <Ionicons name={showProductForm ? 'remove-circle' : 'add-circle'} size={24} color="#D4AF37" />
+                </TouchableOpacity>
               </View>
+
+              {productLinks.map((product, index) => (
+                <View key={index} style={styles.productItem}>
+                  <View style={styles.productInfo}>
+                    <Text style={styles.productName}>{product.name}</Text>
+                    <Text style={styles.productPlatform}>{product.platform}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => removeProductLink(index)}>
+                    <Ionicons name="trash" size={20} color="#FF4458" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              {showProductForm && (
+                <View style={styles.productForm}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Product name"
+                    placeholderTextColor="#666"
+                    value={newProductName}
+                    onChangeText={setNewProductName}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Product URL"
+                    placeholderTextColor="#666"
+                    value={newProductUrl}
+                    onChangeText={setNewProductUrl}
+                    autoCapitalize="none"
+                  />
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.platformSelector}>
+                      {platforms.map((platform) => (
+                        <TouchableOpacity
+                          key={platform}
+                          style={[
+                            styles.platformChip,
+                            newProductPlatform === platform && styles.platformChipActive,
+                          ]}
+                          onPress={() => setNewProductPlatform(platform)}
+                        >
+                          <Text
+                            style={[
+                              styles.platformChipText,
+                              newProductPlatform === platform && styles.platformChipTextActive,
+                            ]}
+                          >
+                            {platform}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                  <TouchableOpacity style={styles.addProductButton} onPress={addProductLink}>
+                    <Text style={styles.addProductButtonText}>Add Product</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+
+          {/* Right side - Intent Tags (vertical scroll) */}
+          <View style={styles.rightSection}>
+            <Text style={styles.intentTitle}>Type</Text>
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.intentList}
+            >
+              {INTENTS.map((intent) => (
+                <TouchableOpacity
+                  key={intent.id}
+                  style={[
+                    styles.intentChip,
+                    intentTag === intent.id && { backgroundColor: intent.color, borderColor: intent.color },
+                  ]}
+                  onPress={() => setIntentTag(intent.id)}
+                >
+                  <Ionicons
+                    name={intent.icon as any}
+                    size={20}
+                    color={intentTag === intent.id ? '#fff' : intent.color}
+                  />
+                  <Text
+                    style={[
+                      styles.intentChipText,
+                      intentTag === intent.id && styles.intentChipTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {intent.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           </View>
-
-          {/* Product Links */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>Product Links</Text>
-              <TouchableOpacity onPress={() => setShowProductForm(!showProductForm)}>
-                <Ionicons name={showProductForm ? 'remove-circle' : 'add-circle'} size={24} color="#D4AF37" />
-              </TouchableOpacity>
-            </View>
-
-            {productLinks.map((product, index) => (
-              <View key={index} style={styles.productItem}>
-                <View style={styles.productInfo}>
-                  <Text style={styles.productName}>{product.name}</Text>
-                  <Text style={styles.productPlatform}>{product.platform}</Text>
-                </View>
-                <TouchableOpacity onPress={() => removeProductLink(index)}>
-                  <Ionicons name="trash" size={20} color="#FF4458" />
-                </TouchableOpacity>
-              </View>
-            ))}
-
-            {showProductForm && (
-              <View style={styles.productForm}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Product name"
-                  placeholderTextColor="#666"
-                  value={newProductName}
-                  onChangeText={setNewProductName}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Product URL"
-                  placeholderTextColor="#666"
-                  value={newProductUrl}
-                  onChangeText={setNewProductUrl}
-                  autoCapitalize="none"
-                />
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.platformSelector}>
-                    {platforms.map((platform) => (
-                      <TouchableOpacity
-                        key={platform}
-                        style={[
-                          styles.platformChip,
-                          newProductPlatform === platform && styles.platformChipActive,
-                        ]}
-                        onPress={() => setNewProductPlatform(platform)}
-                      >
-                        <Text
-                          style={[
-                            styles.platformChipText,
-                            newProductPlatform === platform && styles.platformChipTextActive,
-                          ]}
-                        >
-                          {platform}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
-                <TouchableOpacity style={styles.addProductButton} onPress={addProductLink}>
-                  <Text style={styles.addProductButtonText}>Add Product</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -331,8 +337,52 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '700',
   },
-  content: {
+  mainContent: {
     flex: 1,
+    flexDirection: 'row',
+  },
+  leftSection: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  rightSection: {
+    width: 90,
+    backgroundColor: '#0a0a0a',
+    borderLeftWidth: 1,
+    borderLeftColor: '#1a1a2e',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  intentTitle: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  intentList: {
+    gap: 8,
+  },
+  intentChip: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+    backgroundColor: '#1a1a2e',
+    gap: 4,
+  },
+  intentChipText: {
+    color: '#888',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  intentChipTextActive: {
+    color: '#fff',
   },
   mediaSection: {
     padding: 16,
@@ -342,7 +392,7 @@ const styles = StyleSheet.create({
   },
   preview: {
     width: '100%',
-    height: 300,
+    height: 280,
     borderRadius: 12,
     backgroundColor: '#1a1a2e',
   },
@@ -354,8 +404,8 @@ const styles = StyleSheet.create({
   mediaButtons: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 32,
-    paddingVertical: 60,
+    gap: 24,
+    paddingVertical: 50,
     backgroundColor: '#1a1a2e',
     borderRadius: 12,
   },
@@ -365,9 +415,19 @@ const styles = StyleSheet.create({
   },
   mediaButtonText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
   },
-  section: {
+  captionInput: {
+    color: '#fff',
+    fontSize: 16,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a2e',
+  },
+  productsSection: {
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#1a1a2e',
@@ -379,35 +439,8 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 12,
-  },
-  captionInput: {
-    color: '#fff',
-    fontSize: 16,
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  intentTags: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  intentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#1a1a2e',
-    gap: 8,
-  },
-  intentChipText: {
-    color: '#888',
-    fontWeight: '600',
-  },
-  intentChipTextActive: {
-    color: '#fff',
   },
   productItem: {
     flexDirection: 'row',
@@ -416,7 +449,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a2e',
     padding: 12,
     borderRadius: 8,
-    marginBottom: 8,
+    marginTop: 10,
   },
   productInfo: {
     flex: 1,
@@ -432,21 +465,21 @@ const styles = StyleSheet.create({
   },
   productForm: {
     marginTop: 12,
-    gap: 12,
+    gap: 10,
   },
   input: {
     backgroundColor: '#1a1a2e',
     color: '#fff',
     padding: 12,
     borderRadius: 8,
-    fontSize: 16,
+    fontSize: 14,
   },
   platformSelector: {
     flexDirection: 'row',
     gap: 8,
   },
   platformChip: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
     backgroundColor: '#1a1a2e',

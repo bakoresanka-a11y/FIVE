@@ -22,7 +22,7 @@ import { useRouter } from 'expo-router';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const VIDEO_HEIGHT = SCREEN_HEIGHT - 60;
-const PROMPT_INTERVAL = 12; // Show prompt every 12 videos
+const PROMPT_INTERVAL = 12;
 
 type FeedTab = 'following' | 'foryou';
 
@@ -41,12 +41,9 @@ export default function HomeScreen() {
     fetchPosts(true);
   }, []);
 
-  // Track videos watched and show prompts
   useEffect(() => {
     if (activeIndex > 0 && activeIndex !== videosWatched) {
       setVideosWatched(activeIndex);
-      
-      // Show prompt every PROMPT_INTERVAL videos
       if (activeIndex > 0 && activeIndex % PROMPT_INTERVAL === 0) {
         setPromptType(Math.random() > 0.5 ? 'continue' : 'intent');
         setShowPrompt(true);
@@ -98,6 +95,14 @@ export default function HomeScreen() {
     }
   };
 
+  const handleShinePress = () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    router.push('/shine');
+  };
+
   const ListEmptyComponent = () => (
     <View style={styles.emptyContainer}>
       <Image
@@ -116,13 +121,22 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* TikTok-style Header */}
+      {/* Header with Logo */}
       <SafeAreaView edges={['top']} style={styles.headerContainer}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.liveButton}>
-            <Ionicons name="radio" size={20} color="#fff" />
+          {/* Logo + SHINE button */}
+          <TouchableOpacity style={styles.shineButton} onPress={handleShinePress}>
+            <Image
+              source={require('../../assets/images/logo.jpg')}
+              style={styles.headerLogo}
+            />
+            <View style={styles.shineTextContainer}>
+              <Text style={styles.shineText}>SHINE</Text>
+              <View style={styles.liveDot} />
+            </View>
           </TouchableOpacity>
           
+          {/* Tabs */}
           <View style={styles.tabsContainer}>
             <TouchableOpacity
               onPress={() => setActiveTab('following')}
@@ -145,6 +159,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
           
+          {/* Search */}
           <TouchableOpacity 
             style={styles.searchButton}
             onPress={() => router.push('/(tabs)/discover')}
@@ -191,7 +206,7 @@ export default function HomeScreen() {
         />
       ) : isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#fff" />
+          <ActivityIndicator size="large" color="#D4AF37" />
           <Text style={styles.loadingText}>Loading feed...</Text>
         </View>
       ) : (
@@ -227,17 +242,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  liveButton: {
-    width: 40,
-    alignItems: 'flex-start',
+  shineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+  },
+  shineTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  shineText: {
+    color: '#D4AF37',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FF4458',
   },
   tabsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
+    gap: 16,
   },
   tabButton: {
     alignItems: 'center',
@@ -245,17 +283,17 @@ const styles = StyleSheet.create({
   },
   tabText: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
   },
   tabTextActive: {
     color: '#fff',
   },
   tabIndicator: {
-    width: 30,
-    height: 3,
+    width: 28,
+    height: 2,
     backgroundColor: '#fff',
-    borderRadius: 2,
+    borderRadius: 1,
     marginTop: 4,
   },
   searchButton: {
@@ -279,20 +317,20 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 20,
+    width: 120,
+    height: 120,
+    borderRadius: 24,
     marginBottom: 24,
   },
   emptyTitle: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '800',
-    color: '#fff',
+    color: '#D4AF37',
     marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 16,
-    color: '#D4AF37',
+    fontSize: 18,
+    color: '#fff',
     marginBottom: 16,
   },
   emptyText: {

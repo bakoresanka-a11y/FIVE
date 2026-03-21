@@ -105,7 +105,7 @@ export const INTENTS: Intent[] = [
   { id: 'earn', label: 'Earn', icon: 'cash', color: '#10B981', description: 'Make money' },
   { id: 'relax', label: 'Relax', icon: 'happy', color: '#F59E0B', description: 'Chill & enjoy' },
   { id: 'explore', label: 'Explore', icon: 'compass', color: '#3B82F6', description: 'Find new things' },
-  { id: 'shop', label: 'Shop', icon: 'cart', color: '#EC4899', description: 'Buy products' },
+  { id: 'shop', label: 'MY SHINE', icon: 'storefront', color: '#EC4899', description: 'Shop & sell' },
 ];
 
 export const RECOMMENDATION_REASONS = [
