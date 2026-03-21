@@ -45,6 +45,7 @@ class User(UserBase):
     user_id: str
     username: Optional[str] = None
     bio: Optional[str] = None
+    phone: Optional[str] = None
     followers_count: int = 0
     following_count: int = 0
     posts_count: int = 0
@@ -54,6 +55,17 @@ class UserUpdate(BaseModel):
     username: Optional[str] = None
     bio: Optional[str] = None
     picture: Optional[str] = None
+    phone: Optional[str] = None
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    name: str
+    username: Optional[str] = None
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
 
 class PostCreate(BaseModel):
     media_data: str  # base64 encoded
@@ -244,6 +256,130 @@ async def logout(request: Request, response: Response):
     
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out"}
+
+@api_router.post("/auth/register")
+async def register(user_data: UserRegister, response: Response):
+    """Register a new user with email and password"""
+    import hashlib
+    
+    # Check if email already exists
+    existing_user = await db.users.find_one({"email": user_data.email.lower()}, {"_id": 0})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Check if username is taken (if provided)
+    if user_data.username:
+        existing_username = await db.users.find_one({"username": user_data.username.lower()}, {"_id": 0})
+        if existing_username:
+            raise HTTPException(status_code=400, detail="Username already taken")
+    
+    # Hash password
+    password_hash = hashlib.sha256(user_data.password.encode()).hexdigest()
+    
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    session_token = f"st_{uuid.uuid4().hex}"
+    created_at = datetime.now(timezone.utc)
+    
+    # Create user
+    new_user = {
+        "user_id": user_id,
+        "email": user_data.email.lower(),
+        "name": user_data.name,
+        "password_hash": password_hash,
+        "picture": None,
+        "username": user_data.username.lower() if user_data.username else None,
+        "bio": None,
+        "phone": None,
+        "followers_count": 0,
+        "following_count": 0,
+        "posts_count": 0,
+        "created_at": created_at
+    }
+    await db.users.insert_one(new_user)
+    
+    # Create session
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    # Set cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    # Return user without password_hash and with serializable datetime
+    user_response = {
+        "user_id": user_id,
+        "email": user_data.email.lower(),
+        "name": user_data.name,
+        "picture": None,
+        "username": user_data.username.lower() if user_data.username else None,
+        "bio": None,
+        "phone": None,
+        "followers_count": 0,
+        "following_count": 0,
+        "posts_count": 0,
+        "created_at": created_at.isoformat()
+    }
+    
+    return {"user": user_response, "session_token": session_token}
+
+@api_router.post("/auth/login")
+async def login(credentials: UserLogin, response: Response):
+    """Login with email and password"""
+    import hashlib
+    
+    # Find user by email
+    user = await db.users.find_one({"email": credentials.email.lower()}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Check if user has password (not OAuth-only user)
+    if "password_hash" not in user:
+        raise HTTPException(status_code=401, detail="Please use Google login for this account")
+    
+    # Verify password
+    password_hash = hashlib.sha256(credentials.password.encode()).hexdigest()
+    if user.get("password_hash") != password_hash:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    session_token = f"st_{uuid.uuid4().hex}"
+    
+    # Create session
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user["user_id"],
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    # Set cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    # Return user without password_hash
+    user_response = {k: v for k, v in user.items() if k != "password_hash"}
+    
+    return {"user": user_response, "session_token": session_token}
 
 # ============== USER ROUTES ==============
 

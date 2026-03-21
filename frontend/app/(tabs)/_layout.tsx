@@ -9,7 +9,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#D4AF37',
+        tabBarActiveTintColor: '#fff',
         tabBarInactiveTintColor: '#888',
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabBarLabel,
@@ -19,17 +19,17 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="discover"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="compass" size={size} color={color} />
+          title: 'Discover',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'compass' : 'compass-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -37,19 +37,22 @@ export default function TabLayout() {
         name="create"
         options={{
           title: '',
-          tabBarIcon: ({ color }) => (
+          tabBarIcon: () => (
             <View style={styles.createButton}>
-              <Ionicons name="add" size={28} color="#000" />
+              <View style={styles.createButtonInner}>
+                <Ionicons name="add" size={24} color="#000" />
+              </View>
             </View>
           ),
+          tabBarLabel: () => null,
         }}
       />
       <Tabs.Screen
         name="inbox"
         options={{
           title: 'Inbox',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mail" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -57,8 +60,8 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -68,23 +71,38 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#0a0a0a',
-    borderTopWidth: 0,
-    height: Platform.OS === 'ios' ? 85 : 65,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+    backgroundColor: '#000',
+    borderTopWidth: 0.5,
+    borderTopColor: '#333',
+    height: Platform.OS === 'ios' ? 85 : 60,
+    paddingTop: 5,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 5,
   },
   tabBarLabel: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '500',
+    marginTop: 2,
   },
   createButton: {
-    width: 44,
+    position: 'relative',
+    width: 48,
     height: 32,
-    backgroundColor: '#D4AF37',
+    marginTop: -2,
+  },
+  createButtonInner: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 5,
+    // TikTok-style gradient sides
+    shadowColor: '#25F4EE',
+    shadowOffset: { width: -3, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
 });

@@ -7,25 +7,28 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
-  Platform,
-  ViewToken,
+  TouchableOpacity,
   Image,
+  ViewToken,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useFeedStore } from '../../src/store/feedStore';
 import { useAuthStore } from '../../src/store/authStore';
 import VideoCard from '../../src/components/VideoCard';
-import IntentSelector from '../../src/components/IntentSelector';
-import { Post } from '../../src/types';
+import { Post, IntentTag } from '../../src/types';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const VIDEO_HEIGHT = SCREEN_HEIGHT - 150;
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
+const VIDEO_HEIGHT = SCREEN_HEIGHT - 60;
+
+type FeedTab = 'following' | 'foryou';
 
 export default function HomeScreen() {
   const { posts, isLoading, currentIntent, setCurrentIntent, fetchPosts, hasMore } = useFeedStore();
   const { isAuthenticated } = useAuthStore();
   const [activeIndex, setActiveIndex] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<FeedTab>('foryou');
 
   useEffect(() => {
     fetchPosts(true);
@@ -81,21 +84,42 @@ export default function HomeScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header with Intent Selector */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Image
-            source={require('../../assets/images/logo.jpg')}
-            style={styles.headerLogo}
-          />
-          <Text style={styles.headerTitle}>Five</Text>
+    <View style={styles.container}>
+      {/* TikTok-style Header */}
+      <SafeAreaView edges={['top']} style={styles.headerContainer}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.liveButton}>
+            <Ionicons name="radio" size={20} color="#fff" />
+            <Text style={styles.liveText}>LIVE</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity
+              onPress={() => setActiveTab('following')}
+              style={styles.tabButton}
+            >
+              <Text style={[styles.tabText, activeTab === 'following' && styles.tabTextActive]}>
+                Following
+              </Text>
+              {activeTab === 'following' && <View style={styles.tabIndicator} />}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={() => setActiveTab('foryou')}
+              style={styles.tabButton}
+            >
+              <Text style={[styles.tabText, activeTab === 'foryou' && styles.tabTextActive]}>
+                For You
+              </Text>
+              {activeTab === 'foryou' && <View style={styles.tabIndicator} />}
+            </TouchableOpacity>
+          </View>
+          
+          <TouchableOpacity style={styles.searchButton}>
+            <Ionicons name="search" size={24} color="#fff" />
+          </TouchableOpacity>
         </View>
-        <IntentSelector
-          selectedIntent={currentIntent}
-          onSelect={setCurrentIntent}
-        />
-      </View>
+      </SafeAreaView>
 
       {/* Video Feed */}
       {posts.length > 0 ? (
@@ -116,13 +140,13 @@ export default function HomeScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#D4AF37"
+              tintColor="#fff"
             />
           }
           ListFooterComponent={
             isLoading && posts.length > 0 ? (
               <View style={styles.footer}>
-                <ActivityIndicator color="#D4AF37" />
+                <ActivityIndicator color="#fff" />
               </View>
             ) : null
           }
@@ -134,13 +158,13 @@ export default function HomeScreen() {
         />
       ) : isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#D4AF37" />
+          <ActivityIndicator size="large" color="#fff" />
           <Text style={styles.loadingText}>Loading feed...</Text>
         </View>
       ) : (
         <ListEmptyComponent />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -149,28 +173,56 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  header: {
-    backgroundColor: '#0a0a0a',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+  headerContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
-  headerTop: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingVertical: 10,
   },
-  headerLogo: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    marginRight: 10,
+  liveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#D4AF37',
+  liveText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+  tabButton: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  tabText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#fff',
+  },
+  tabIndicator: {
+    width: 30,
+    height: 3,
+    backgroundColor: '#fff',
+    borderRadius: 2,
+    marginTop: 4,
+  },
+  searchButton: {
+    padding: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -197,12 +249,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#D4AF37',
+    color: '#fff',
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#fff',
+    color: '#D4AF37',
     marginBottom: 16,
   },
   emptyText: {

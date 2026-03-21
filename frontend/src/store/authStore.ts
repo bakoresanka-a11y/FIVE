@@ -10,10 +10,12 @@ interface AuthState {
   isLoading: boolean;
   sessionToken: string | null;
   setUser: (user: User | null) => void;
-  setSessionToken: (token: string | null) => void;
+  setSessionToken: (token: string | null) => Promise<void>;
   checkAuth: () => Promise<void>;
   logout: () => Promise<void>;
   exchangeSession: (sessionId: string) => Promise<User | null>;
+  login: (email: string, password: string) => Promise<User | null>;
+  register: (email: string, password: string, name: string, username?: string) => Promise<User | null>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -87,6 +89,66 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       console.error('Session exchange failed:', error);
       return null;
+    }
+  },
+
+  login: async (email: string, password: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        await AsyncStorage.setItem('session_token', data.session_token);
+        set({ 
+          user: data.user, 
+          isAuthenticated: true, 
+          sessionToken: data.session_token,
+          isLoading: false 
+        });
+        return data.user;
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Login failed');
+      }
+    } catch (error: any) {
+      console.error('Login failed:', error);
+      throw error;
+    }
+  },
+
+  register: async (email: string, password: string, name: string, username?: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, name, username }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        await AsyncStorage.setItem('session_token', data.session_token);
+        set({ 
+          user: data.user, 
+          isAuthenticated: true, 
+          sessionToken: data.session_token,
+          isLoading: false 
+        });
+        return data.user;
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Registration failed');
+      }
+    } catch (error: any) {
+      console.error('Registration failed:', error);
+      throw error;
     }
   },
 
