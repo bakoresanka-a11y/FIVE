@@ -101,12 +101,53 @@ export interface Intent {
 }
 
 export const INTENTS: Intent[] = [
-  { id: 'learn', label: 'Learn', icon: 'book', color: '#4F46E5', description: 'Discover knowledge' },
+  { id: 'learn', label: 'Learn', icon: 'book', color: '#22D3EE', description: 'Discover knowledge' },
   { id: 'earn', label: 'Earn', icon: 'cash', color: '#10B981', description: 'Make money' },
   { id: 'relax', label: 'Relax', icon: 'happy', color: '#F59E0B', description: 'Chill & enjoy' },
-  { id: 'explore', label: 'Explore', icon: 'compass', color: '#3B82F6', description: 'Find new things' },
-  { id: 'shop', label: 'MY SHINE', icon: 'storefront', color: '#EC4899', description: 'Shop & sell' },
+  { id: 'explore', label: 'Explore', icon: 'compass', color: '#8B5CF6', description: 'Find new things' },
+  { id: 'shop', label: 'MY SHINE', icon: 'storefront', color: '#F43F5E', description: 'Shop & sell' },
 ];
+
+// Theme colors - Bioluminescent Future
+export const THEME = {
+  primary: '#F43F5E',      // Pink
+  secondary: '#22D3EE',    // Cyan
+  accent: '#8B5CF6',       // Purple
+  success: '#10B981',      // Green
+  warning: '#F59E0B',      // Orange
+  background: '#0a0a0f',   // Dark
+  surface: '#1a1a2e',      // Surface
+  surfaceLight: '#2a2a3e', // Surface light
+  text: '#ffffff',
+  textSecondary: '#888888',
+};
+
+// Categories for educational content
+export const CATEGORIES = [
+  { id: 'medicine', label: 'Medicine', icon: 'medical', color: '#F43F5E' },
+  { id: 'business', label: 'Business', icon: 'briefcase', color: '#10B981' },
+  { id: 'technology', label: 'Technology', icon: 'hardware-chip', color: '#22D3EE' },
+  { id: 'science', label: 'Science', icon: 'flask', color: '#8B5CF6' },
+  { id: 'languages', label: 'Languages', icon: 'language', color: '#F59E0B' },
+  { id: 'arts', label: 'Arts', icon: 'color-palette', color: '#EC4899' },
+];
+
+export interface Lesson {
+  lesson_id: string;
+  title: string;
+  category: string;
+  description: string;
+  content: string;
+  author_id: string;
+  views_count: number;
+  likes_count: number;
+  created_at: string;
+  author?: {
+    user_id: string;
+    name: string;
+    picture?: string;
+  };
+}
 
 export const RECOMMENDATION_REASONS = [
   'Based on your interests',

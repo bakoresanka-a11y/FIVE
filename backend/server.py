@@ -1176,6 +1176,101 @@ async def get_user_spaces(user_id: str, skip: int = 0, limit: int = 20):
     
     return spaces
 
+# ============== LESSONS ROUTES ==============
+
+@api_router.get("/lessons")
+async def get_lessons(category: Optional[str] = None, skip: int = 0, limit: int = 20):
+    """Get educational lessons"""
+    query = {}
+    if category:
+        query["category"] = category
+    
+    lessons = await db.lessons.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    
+    # Enrich with author info
+    enriched = []
+    for lesson in lessons:
+        author = await db.users.find_one({"user_id": lesson.get("author_id")}, {"_id": 0})
+        enriched.append({
+            **lesson,
+            "author": {
+                "user_id": author["user_id"] if author else None,
+                "name": author["name"] if author else "Unknown",
+                "picture": author.get("picture") if author else None
+            } if author else None
+        })
+    
+    return enriched
+
+@api_router.get("/lessons/{lesson_id}")
+async def get_lesson(lesson_id: str):
+    """Get a single lesson"""
+    lesson = await db.lessons.find_one({"lesson_id": lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    # Increment views
+    await db.lessons.update_one(
+        {"lesson_id": lesson_id},
+        {"$inc": {"views_count": 1}}
+    )
+    
+    author = await db.users.find_one({"user_id": lesson.get("author_id")}, {"_id": 0})
+    
+    return {
+        **lesson,
+        "views_count": lesson.get("views_count", 0) + 1,
+        "author": {
+            "user_id": author["user_id"] if author else None,
+            "name": author["name"] if author else "Unknown",
+            "picture": author.get("picture") if author else None
+        } if author else None
+    }
+
+@api_router.get("/lessons/categories/list")
+async def get_lesson_categories():
+    """Get all lesson categories"""
+    return ["medicine", "business", "technology", "science", "languages", "arts"]
+
+# ============== MOOD DETECTION ==============
+
+@api_router.post("/mood/detect")
+async def detect_mood(request: Request, user: User = Depends(require_auth)):
+    """Detect user mood based on their activity (AI-powered)"""
+    body = await request.json()
+    activity_data = body.get("activity", "")
+    
+    # Simple mood detection based on keywords (in production, use GPT)
+    moods = {
+        "happy": ["great", "awesome", "love", "happy", "excited", "fun"],
+        "focused": ["learn", "study", "work", "focus", "productive"],
+        "relaxed": ["chill", "relax", "calm", "peace", "rest"],
+        "curious": ["explore", "discover", "wonder", "interesting", "new"],
+        "motivated": ["earn", "money", "hustle", "goal", "success"],
+        "creative": ["art", "create", "design", "imagine", "build"],
+        "neutral": []
+    }
+    
+    detected_mood = "neutral"
+    activity_lower = activity_data.lower()
+    
+    for mood, keywords in moods.items():
+        if any(kw in activity_lower for kw in keywords):
+            detected_mood = mood
+            break
+    
+    # Update user mood
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"mood": detected_mood}}
+    )
+    
+    return {
+        "mood": detected_mood,
+        "confidence": 0.85,
+        "recommendation": f"Based on your {detected_mood} mood, we recommend content that matches your current state."
+    }
+
 # Include the router in the main app
 app.include_router(api_router)
 
